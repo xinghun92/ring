@@ -414,10 +414,6 @@ void CRYPTO_gcm128_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
 
 void CRYPTO_gcm128_set_96_bit_iv(GCM128_CONTEXT *ctx, const AES_KEY *key,
                                  const uint8_t *iv) {
-  const union {
-    long one;
-    char little;
-  } is_endian = {1};
   unsigned int ctr;
 
   ctx->Yi.u[0] = 0;
@@ -435,11 +431,7 @@ void CRYPTO_gcm128_set_96_bit_iv(GCM128_CONTEXT *ctx, const AES_KEY *key,
 
   (*ctx->block)(ctx->Yi.c, ctx->EK0.c, key);
   ++ctr;
-  if (is_endian.little) {
-    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-  } else {
-    ctx->Yi.d[3] = ctr;
-  }
+  to_be_u32_ptr(ctx->Yi.c + 12, ctr);
 }
 
 int CRYPTO_gcm128_aad(GCM128_CONTEXT *ctx, const uint8_t *aad, size_t len) {
@@ -510,10 +502,6 @@ int CRYPTO_gcm128_aad(GCM128_CONTEXT *ctx, const uint8_t *aad, size_t len) {
 int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
                           const unsigned char *in, unsigned char *out,
                           size_t len) {
-  const union {
-    long one;
-    char little;
-  } is_endian = {1};
   unsigned int n, ctr;
   size_t i;
   uint64_t mlen = ctx->len.u[1];
@@ -539,11 +527,7 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     ctx->ares = 0;
   }
 
-  if (is_endian.little) {
-    ctr = from_be_u32_ptr(ctx->Yi.c + 12);
-  } else {
-    ctr = ctx->Yi.d[3];
-  }
+  ctr = from_be_u32_ptr(ctx->Yi.c + 12);
 
   n = ctx->mres;
   if (n) {
@@ -566,11 +550,7 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     while (j) {
       (*block)(ctx->Yi.c, ctx->EKi.c, key);
       ++ctr;
-      if (is_endian.little) {
-        to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-      } else {
-        ctx->Yi.d[3] = ctr;
-      }
+      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
       for (i = 0; i < 16; ++i) {
         out[i] = in[i] ^ ctx->EKi.c[i];
       }
@@ -588,11 +568,7 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     while (len >= 16) {
       (*block)(ctx->Yi.c, ctx->EKi.c, key);
       ++ctr;
-      if (is_endian.little) {
-        to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-      } else {
-        ctx->Yi.d[3] = ctr;
-      }
+      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
       for (i = 0; i < 16; ++i) {
         out[i] = in[i] ^ ctx->EKi.c[i];
       }
@@ -606,11 +582,7 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
   while (len >= 16) {
     (*block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     for (i = 0; i < 16; ++i) {
       ctx->Xi.c[i] ^= out[i] = in[i] ^ ctx->EKi.c[i];
     }
@@ -623,11 +595,7 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
   if (len) {
     (*block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     while (len--) {
       ctx->Xi.c[n] ^= out[n] = in[n] ^ ctx->EKi.c[n];
       ++n;
@@ -641,10 +609,6 @@ int CRYPTO_gcm128_encrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
 int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
                           const unsigned char *in, unsigned char *out,
                           size_t len) {
-  const union {
-    long one;
-    char little;
-  } is_endian = {1};
   unsigned int n, ctr;
   size_t i;
   uint64_t mlen = ctx->len.u[1];
@@ -670,11 +634,7 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     ctx->ares = 0;
   }
 
-  if (is_endian.little) {
-    ctr = from_be_u32_ptr(ctx->Yi.c + 12);
-  } else {
-    ctr = ctx->Yi.d[3];
-  }
+  ctr = from_be_u32_ptr(ctx->Yi.c + 12);
 
   n = ctx->mres;
   if (n) {
@@ -700,11 +660,7 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     while (j) {
       (*block)(ctx->Yi.c, ctx->EKi.c, key);
       ++ctr;
-      if (is_endian.little) {
-        to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-      } else {
-        ctx->Yi.d[3] = ctr;
-      }
+      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
       for (i = 0; i < 16; ++i) {
         out[i] = in[i] ^ ctx->EKi.c[i];
       }
@@ -720,11 +676,7 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
     while (len >= 16) {
       (*block)(ctx->Yi.c, ctx->EKi.c, key);
       ++ctr;
-      if (is_endian.little) {
-        to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-      } else {
-        ctx->Yi.d[3] = ctr;
-      }
+      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
       for (i = 0; i < 16; ++i) {
         out[i] = in[i] ^ ctx->EKi.c[i];
       }
@@ -737,11 +689,7 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
   while (len >= 16) {
     (*block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     for (i = 0; i < 16; ++i) {
       size_t c = in[i];
       out[i] = c ^ ctx->EKi.c[i];
@@ -756,11 +704,7 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
   if (len) {
     (*block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     while (len--) {
       uint8_t c = in[n];
       ctx->Xi.c[n] ^= c;
@@ -776,10 +720,6 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx, const AES_KEY *key,
 int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
                                 const uint8_t *in, uint8_t *out, size_t len,
                                 aes_ctr_f stream) {
-  const union {
-    long one;
-    char little;
-  } is_endian = {1};
   unsigned int n, ctr;
   uint64_t mlen = ctx->len.u[1];
 #ifdef GCM_FUNCREF_4BIT
@@ -803,11 +743,7 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
     ctx->ares = 0;
   }
 
-  if (is_endian.little) {
-    ctr = from_be_u32_ptr(ctx->Yi.c + 12);
-  } else {
-    ctr = ctx->Yi.d[3];
-  }
+  ctr = from_be_u32_ptr(ctx->Yi.c + 12);
 
   n = ctx->mres;
   if (n) {
@@ -827,11 +763,7 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
   while (len >= GHASH_CHUNK) {
     (*stream)(in, out, GHASH_CHUNK / 16, key, ctx->Yi.c);
     ctr += GHASH_CHUNK / 16;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     GHASH(ctx, out, GHASH_CHUNK);
     out += GHASH_CHUNK;
     in += GHASH_CHUNK;
@@ -844,11 +776,7 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
 
     (*stream)(in, out, j, key, ctx->Yi.c);
     ctr += (unsigned int)j;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     in += i;
     len -= i;
 #if defined(GHASH)
@@ -867,11 +795,7 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
   if (len) {
     (*ctx->block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     while (len--) {
       ctx->Xi.c[n] ^= out[n] = in[n] ^ ctx->EKi.c[n];
       ++n;
@@ -885,10 +809,6 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
 int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
                                 const uint8_t *in, uint8_t *out, size_t len,
                                 aes_ctr_f stream) {
-  const union {
-    long one;
-    char little;
-  } is_endian = {1};
   unsigned int n, ctr;
   uint64_t mlen = ctx->len.u[1];
 #ifdef GCM_FUNCREF_4BIT
@@ -912,11 +832,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
     ctx->ares = 0;
   }
 
-  if (is_endian.little) {
-    ctr = from_be_u32_ptr(ctx->Yi.c + 12);
-  } else {
-    ctr = ctx->Yi.d[3];
-  }
+  ctr = from_be_u32_ptr(ctx->Yi.c + 12);
 
   n = ctx->mres;
   if (n) {
@@ -939,11 +855,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
     GHASH(ctx, in, GHASH_CHUNK);
     (*stream)(in, out, GHASH_CHUNK / 16, key, ctx->Yi.c);
     ctr += GHASH_CHUNK / 16;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     out += GHASH_CHUNK;
     in += GHASH_CHUNK;
     len -= GHASH_CHUNK;
@@ -969,11 +881,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
 #endif
     (*stream)(in, out, j, key, ctx->Yi.c);
     ctr += (unsigned int)j;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     out += i;
     in += i;
     len -= i;
@@ -981,11 +889,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx, const AES_KEY *key,
   if (len) {
     (*ctx->block)(ctx->Yi.c, ctx->EKi.c, key);
     ++ctr;
-    if (is_endian.little) {
-      to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-    } else {
-      ctx->Yi.d[3] = ctr;
-    }
+    to_be_u32_ptr(ctx->Yi.c + 12, ctr);
     while (len--) {
       uint8_t c = in[n];
       ctx->Xi.c[n] ^= c;
