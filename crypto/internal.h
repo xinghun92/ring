@@ -158,6 +158,28 @@ void OPENSSL_cpuid_setup(void);
 #define inline __inline
 #endif
 
+
+#if defined(__GNUC__)
+#define EXPECT(x, y) __builtin_expect((x), (y))
+#else
+#define EXPECT(x, y) (x)
+#endif
+#define LIKELY(x) EXPECT((x), 1)
+#define UNLIKELY(x) EXPECT((x), 0)
+
+#if defined(__clang__) && \
+    (!defined(__apple_build_version__) && \
+     (__clang_major__ >= 4 || (__clang_major__ == 3 && __clang_major__ >= 5)))
+// XXX: Which versions of Apple Clang support this? 600.0.54, at least, doesn't,
+// even though it is based on LLVM 3.5svn.
+#define NOVECTOR _Pragma("clang loop vectorize(disable)")
+#elif defined(_MSC_VER)
+#define NOVECTOR __pragma(loop(no_vector))
+#else
+#define NOVECTOR
+#endif
+
+
 #define OPENSSL_LITTLE_ENDIAN 1
 #define OPENSSL_BIG_ENDIAN 2
 

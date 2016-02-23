@@ -434,35 +434,29 @@ int CRYPTO_gcm128_message_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
 
 #ifdef GCM_FUNCREF_4BIT
   void (*gcm_gmult_p)(uint64_t Xi[2], const u128 Htable[16]) = ctx->gmult;
-#ifdef GHASH
-  void (*gcm_ghash_p)(uint64_t Xi[2], const u128 Htable[16], const uint8_t *inp,
-                      size_t len) = ctx->ghash;
-#endif
 #endif
 
-#ifdef GHASH
-  size_t aad_len_whole_blocks = aad_len & kSizeTWithoutLower4Bits;
-  if (aad_len_whole_blocks != 0) {
-    GHASH(ctx, aad, aad_len_whole_blocks);
-    aad += aad_len_whole_blocks;
-    aad_len -= aad_len_whole_blocks;
-  }
-#else
-  while (aad_len >= 16) {
-    for (size_t i = 0; i < 16; ++i) {
-      ctx->Xi.c[i] ^= aad[i];
+  /* Most of the time the AAD will be smaller than one block so optimize for
+   * these common small cases, TLS 1.2 in particular.
+   *
+   * * TLS 1.2: 13 bytes of AAD: A 5-byte record header and an 8-byte of
+   *            sequence number.
+   * * IPSEC: The Linux kernel's implementation is optimized for {8, 12, 16}.
+   * * SSH: 4 byte sof AAD.
+   *
+   * An exception is 802.11n WPA, which seems to use 20 byte of AAD. */
+  if (EXPECT(aad_len, 13) > 0) {
+    for (;;) {
+      NOVECTOR for (size_t i = 0; i < aad_len && i < 16; ++i) {
+        ctx->Xi.c[i] ^= aad[i];
+      }
+      GCM_MUL(ctx, Xi);
+      if (LIKELY(aad_len <= 16)) {
+        break;
+      }
+      aad += 16;
+      aad_len -= 16;
     }
-    GCM_MUL(ctx, Xi);
-    aad += 16;
-    aad_len -= 16;
-  }
-#endif
-  if (aad_len > 0) {
-    assert(aad_len < 16);
-    for (size_t i = 0; i < aad_len; ++i) {
-      ctx->Xi.c[i] ^= aad[i];
-    }
-    GCM_MUL(ctx, Xi);
   }
 
   return 1;
