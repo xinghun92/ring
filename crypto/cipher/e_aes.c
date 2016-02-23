@@ -214,9 +214,7 @@ int evp_aead_aes_gcm_seal(const void *ctx_buf, uint8_t *in_out,
   const AES_KEY *key = &gcm_ctx->ks.ks;
 
   memcpy(&gcm, &gcm_ctx->gcm, sizeof(gcm));
-  CRYPTO_gcm128_set_96_bit_iv(&gcm, key, nonce);
-
-  if (ad_len > 0 && !CRYPTO_gcm128_aad_oneshot(&gcm, ad, ad_len)) {
+  if (!CRYPTO_gcm128_message_init(&gcm, key, nonce, ad, ad_len)) {
     return 0;
   }
   if (in_out_len > 0) {
@@ -258,9 +256,7 @@ int evp_aead_aes_gcm_open(const void *ctx_buf, uint8_t *out,
   const AES_KEY *key = &gcm_ctx->ks.ks;
 
   memcpy(&gcm, &gcm_ctx->gcm, sizeof(gcm));
-  CRYPTO_gcm128_set_96_bit_iv(&gcm, key, nonce);
-
-  if (!CRYPTO_gcm128_aad_oneshot(&gcm, ad, ad_len)) {
+  if (!CRYPTO_gcm128_message_init(&gcm, key, nonce, ad, ad_len)) {
     return 0;
   }
   if (in_out_len > 0) {

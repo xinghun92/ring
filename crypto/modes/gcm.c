@@ -410,29 +410,28 @@ void CRYPTO_gcm128_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
 #endif
 }
 
-void CRYPTO_gcm128_set_96_bit_iv(GCM128_CONTEXT *ctx, const AES_KEY *key,
-                                 const uint8_t *iv) {
-  unsigned int ctr;
+int CRYPTO_gcm128_message_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
+                               const uint8_t iv[12], const uint8_t *aad,
+                               size_t aad_len) {
+#if SIZE_MAX > UINT32_MAX
+  if (aad_len > (UINT64_C(1) << 61)) {
+    return 0;
+  }
+#endif
 
-  ctx->Yi.u[0] = 0;
-  ctx->Yi.u[1] = 0;
-  ctx->Xi.u[0] = 0;
-  ctx->Xi.u[1] = 0;
-  ctx->len.u[0] = 0; /* AAD length */
-  ctx->len.u[1] = 0; /* message length */
+  uint32_t ctr = 1;
 
   memcpy(ctx->Yi.c, iv, 12);
-  ctx->Yi.c[15] = 1;
-  ctr = 1;
+  to_be_u32_ptr(ctx->Yi.c + 12, ctr);
+  ctx->Xi.u[0] = 0;
+  ctx->Xi.u[1] = 0;
+  ctx->len.u[0] = aad_len;
+  ctx->len.u[1] = 0; /* message length */
 
   (*ctx->block)(ctx->Yi.c, ctx->EK0.c, key);
   ++ctr;
   to_be_u32_ptr(ctx->Yi.c + 12, ctr);
-}
 
-int CRYPTO_gcm128_aad_oneshot(GCM128_CONTEXT *ctx, const uint8_t *aad,
-                              size_t len) {
-  size_t i;
 #ifdef GCM_FUNCREF_4BIT
   void (*gcm_gmult_p)(uint64_t Xi[2], const u128 Htable[16]) = ctx->gmult;
 #ifdef GHASH
@@ -441,36 +440,26 @@ int CRYPTO_gcm128_aad_oneshot(GCM128_CONTEXT *ctx, const uint8_t *aad,
 #endif
 #endif
 
-  if (ctx->len.u[0] != 0 || ctx->len.u[1] != 0) {
-    return 0;
-  }
-#if SIZE_MAX > UINT32_MAX
-  if (len > (UINT64_C(1) << 61)) {
-    return 0;
-  }
-#endif
-  ctx->len.u[0] = len;
-
 #ifdef GHASH
-  i = len & kSizeTWithoutLower4Bits;
-  if (i != 0) {
-    GHASH(ctx, aad, i);
-    aad += i;
-    len -= i;
+  size_t aad_len_whole_blocks = aad_len & kSizeTWithoutLower4Bits;
+  if (aad_len_whole_blocks != 0) {
+    GHASH(ctx, aad, aad_len_whole_blocks);
+    aad += aad_len_whole_blocks;
+    aad_len -= aad_len_whole_blocks;
   }
 #else
-  while (len >= 16) {
-    for (i = 0; i < 16; ++i) {
+  while (aad_len >= 16) {
+    for (size_t i = 0; i < 16; ++i) {
       ctx->Xi.c[i] ^= aad[i];
     }
     GCM_MUL(ctx, Xi);
     aad += 16;
-    len -= 16;
+    aad_len -= 16;
   }
 #endif
-  if (len > 0) {
-    assert(len < 16);
-    for (i = 0; i < len; ++i) {
+  if (aad_len > 0) {
+    assert(aad_len < 16);
+    for (size_t i = 0; i < aad_len; ++i) {
       ctx->Xi.c[i] ^= aad[i];
     }
     GCM_MUL(ctx, Xi);

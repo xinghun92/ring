@@ -116,16 +116,14 @@ OPENSSL_EXPORT void CRYPTO_gcm128_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
                                        aes_block_f block);
 
 /* CRYPTO_gcm128_set_96_bit_iv sets the IV (nonce) for |ctx|. The |key| must be
- * the same key that was passed to |CRYPTO_gcm128_init|. */
-OPENSSL_EXPORT void CRYPTO_gcm128_set_96_bit_iv(GCM128_CONTEXT *ctx,
-                                                const AES_KEY *key,
-                                                const uint8_t *iv);
-
-/* CRYPTO_gcm128_aad sets the authenticated data for an instance of GCM.
- * This must be called no more than once and must be called before any data is
- * encrypted/decrypted. It returns one on success and zero otherwise. */
-OPENSSL_EXPORT int CRYPTO_gcm128_aad_oneshot(GCM128_CONTEXT *ctx,
-                                             const uint8_t *aad, size_t len);
+ * the same key that was passed to |CRYPTO_gcm128_init|. |aad| is the
+ * authenticated data and |aad_len| is its length. It returns one on success
+ * and zero otherwise.*/
+OPENSSL_EXPORT int CRYPTO_gcm128_message_init(GCM128_CONTEXT *ctx,
+                                              const AES_KEY *key,
+                                              const uint8_t iv[12],
+                                              const uint8_t *aad,
+                                              size_t aad_len);
 
 /* CRYPTO_gcm128_encrypt encrypts |len| bytes from |in| to |out|. The |key|
  * must be the same key that was passed to |CRYPTO_gcm128_init|. It returns one
