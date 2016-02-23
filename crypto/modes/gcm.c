@@ -281,12 +281,11 @@ void gcm_ghash_clmul(uint64_t Xi[2], const u128 Htable[16], const uint8_t *inp,
 
 #if defined(OPENSSL_X86)
 #define gcm_init_avx gcm_init_clmul
-#define gcm_gmult_avx gcm_gmult_clmul
 #define gcm_ghash_avx gcm_ghash_clmul
 #else
 void gcm_init_avx(u128 Htable[16], const uint64_t Xi[2]);
-void gcm_gmult_avx(uint64_t Xi[2], const u128 Htable[16]);
-void gcm_ghash_avx(uint64_t Xi[2], const u128 Htable[16], const uint8_t *inp, size_t len);
+void gcm_ghash_avx(uint64_t Xi[2], const u128 Htable[16], const uint8_t *in,
+                   size_t len);
 #endif
 
 #if defined(OPENSSL_X86)
@@ -367,13 +366,12 @@ void CRYPTO_gcm128_init(GCM128_CONTEXT *ctx, const AES_KEY *key,
 
 #if defined(GHASH_ASM_X86_OR_64)
   if (crypto_gcm_clmul_enabled()) {
+    ctx->gmult = gcm_gmult_clmul;
     if (((OPENSSL_ia32cap_P[1] >> 22) & 0x41) == 0x41) { /* AVX+MOVBE */
       gcm_init_avx(ctx->Htable, ctx->H.u);
-      ctx->gmult = gcm_gmult_avx;
       ctx->ghash = gcm_ghash_avx;
     } else {
       gcm_init_clmul(ctx->Htable, ctx->H.u);
-      ctx->gmult = gcm_gmult_clmul;
       ctx->ghash = gcm_ghash_clmul;
     }
     return;

@@ -552,7 +552,6 @@ $code.=<<___;
 .type	gcm_gmult_clmul,\@abi-omnipotent
 .align	16
 gcm_gmult_clmul:
-.L_gmult_clmul:
 	movdqu		($Xip),$Xi
 	movdqa		.Lbswap_mask(%rip),$T3
 	movdqu		($Htbl),$Hkey
@@ -1093,15 +1092,6 @@ $code.=<<___;
 .size	gcm_init_avx,.-gcm_init_avx
 ___
 }
-
-$code.=<<___;
-.globl	gcm_gmult_avx
-.type	gcm_gmult_avx,\@abi-omnipotent
-.align	32
-gcm_gmult_avx:
-	jmp	.L_gmult_clmul
-.size	gcm_gmult_avx,.-gcm_gmult_avx
-___
 
 $code.=<<___;
 .globl	gcm_ghash_avx
