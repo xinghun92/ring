@@ -216,17 +216,18 @@ int evp_aead_aes_gcm_seal(const void *ctx_buf, uint8_t *in_out,
   memcpy(&gcm, &gcm_ctx->gcm, sizeof(gcm));
   CRYPTO_gcm128_set_96_bit_iv(&gcm, key, nonce);
 
-  if (ad_len > 0 && !CRYPTO_gcm128_aad(&gcm, ad, ad_len)) {
+  if (ad_len > 0 && !CRYPTO_gcm128_aad_oneshot(&gcm, ad, ad_len)) {
     return 0;
   }
   if (in_out_len > 0) {
     if (gcm_ctx->ctr) {
-      if (!CRYPTO_gcm128_encrypt_ctr32(&gcm, key, in_out, in_out, in_out_len,
-                                       gcm_ctx->ctr)) {
+      if (!CRYPTO_gcm128_encrypt_ctr32_oneshot(&gcm, key, in_out, in_out,
+                                               in_out_len, gcm_ctx->ctr)) {
         return 0;
       }
     } else {
-      if (!CRYPTO_gcm128_encrypt(&gcm, key, in_out, in_out, in_out_len)) {
+      if (!CRYPTO_gcm128_encrypt_oneshot(&gcm, key, in_out, in_out,
+                                         in_out_len)) {
         return 0;
       }
     }
@@ -259,17 +260,19 @@ int evp_aead_aes_gcm_open(const void *ctx_buf, uint8_t *out,
   memcpy(&gcm, &gcm_ctx->gcm, sizeof(gcm));
   CRYPTO_gcm128_set_96_bit_iv(&gcm, key, nonce);
 
-  if (!CRYPTO_gcm128_aad(&gcm, ad, ad_len)) {
+  if (!CRYPTO_gcm128_aad_oneshot(&gcm, ad, ad_len)) {
     return 0;
   }
   if (in_out_len > 0) {
     if (gcm_ctx->ctr) {
-      if (!CRYPTO_gcm128_decrypt_ctr32(&gcm, key, in, out, in_out_len,
-                                       gcm_ctx->ctr)) {
+      if (!CRYPTO_gcm128_decrypt_ctr32_oneshot(&gcm, key, in, out,
+                                               in_out_len,
+                                               gcm_ctx->ctr)) {
         return 0;
       }
     } else {
-      if (!CRYPTO_gcm128_decrypt(&gcm, key, in, out, in_out_len)) {
+      if (!CRYPTO_gcm128_decrypt_oneshot(&gcm, key, in, out,
+                                         in_out_len)) {
         return 0;
       }
     }
