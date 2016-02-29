@@ -261,14 +261,12 @@ int evp_aead_aes_gcm_open(const void *ctx_buf, uint8_t *out,
   }
   if (in_out_len > 0) {
     if (gcm_ctx->ctr) {
-      if (!CRYPTO_gcm128_decrypt_ctr32_oneshot(&gcm, key, in, out,
-                                               in_out_len,
+      if (!CRYPTO_gcm128_decrypt_ctr32_oneshot(&gcm, key, in, out, in_out_len,
                                                gcm_ctx->ctr)) {
         return 0;
       }
     } else {
-      if (!CRYPTO_gcm128_decrypt_oneshot(&gcm, key, in, out,
-                                         in_out_len)) {
+      if (!CRYPTO_gcm128_decrypt_oneshot(&gcm, key, in, out, in_out_len)) {
         return 0;
       }
     }
