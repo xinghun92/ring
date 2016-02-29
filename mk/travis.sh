@@ -42,6 +42,10 @@ if [[ -n ${DL_TARGET-} ]]; then
   export PATH=$PWD/$DL_BASENAME/bin:$PATH
 fi
 
+if [[ "$TARGET_X" =~ "-linux-" ]]; then
+  cat /proc/cpuinfo
+fi
+
 if [[ ! "$TARGET_X" =~ "x86_64-" ]]; then
   ./mk/travis-install-rust-std.sh
 
