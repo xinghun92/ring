@@ -190,8 +190,8 @@ static void gcm_gmult_4bit(uint64_t Xi[2], const u128 Htable[16]) {
     Z.lo ^= Htable[nlo].lo;
   }
 
-  Xi[0] = from_be_u64(Z.hi);
-  Xi[1] = from_be_u64(Z.lo);
+  Xi[0] = to_be_u64(Z.hi);
+  Xi[1] = to_be_u64(Z.lo);
 }
 
 /* Streamed gcm_mult_4bit, see CRYPTO_gcm128_[en|de]crypt for
@@ -250,8 +250,8 @@ static void gcm_ghash_4bit(uint64_t Xi[2], const u128 Htable[16], const uint8_t 
       Z.lo ^= Htable[nlo].lo;
     }
 
-    Xi[0] = from_be_u64(Z.hi);
-    Xi[1] = from_be_u64(Z.lo);
+    Xi[0] = to_be_u64(Z.hi);
+    Xi[1] = to_be_u64(Z.lo);
   } while (inp += 16, len -= 16);
 }
 #else /* GHASH_ASM */
@@ -802,11 +802,8 @@ void CRYPTO_gcm128_tag(GCM128_CONTEXT *ctx, uint8_t *tag, size_t len) {
   void (*gcm_gmult_p)(uint64_t Xi[2], const u128 Htable[16]) = ctx->gmult;
 #endif
 
-  alen = from_be_u64(alen);
-  clen = from_be_u64(clen);
-
-  ctx->Xi.u[0] ^= alen;
-  ctx->Xi.u[1] ^= clen;
+  ctx->Xi.u[0] ^= to_be_u64(alen);
+  ctx->Xi.u[1] ^= to_be_u64(clen);
   GCM_MUL(ctx, Xi);
 
   ctx->Xi.u[0] ^= ctx->EK0.u[0];

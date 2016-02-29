@@ -524,6 +524,14 @@ static inline uint64_t from_be_u64(uint64_t x) {
   return x;
 }
 
+/* to_be_u64 returns the big-endian-encoded representation of |x|. */
+static inline uint64_t to_be_u64(uint64_t x) {
+#if OPENSSL_ENDIAN != OPENSSL_BIG_ENDIAN
+  x = bswap_u64(x);
+#endif
+  return x;
+}
+
 /* rotate_right_u64 returns |x| with its bits rotated |n| bits to the right. */
 static inline uint64_t rotate_right_u64(uint64_t x, int n) {
   assert(n > 0);
