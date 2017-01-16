@@ -316,15 +316,9 @@ void GFp_cpuid_setup(void) {
     hwcap = get_hwcap_cpuinfo(&cpuinfo);
   }
 
-  /* Clear NEON support if known broken. */
-  g_has_broken_neon = has_broken_neon(&cpuinfo);
-  if (g_has_broken_neon) {
-    hwcap &= ~HWCAP_NEON;
-  }
-
   /* Matching OpenSSL, only report other features if NEON is present. */
   if (hwcap & HWCAP_NEON) {
-    GFp_armcap_P |= ARMV7_NEON;
+    uint32_t armcap = HWCAP_NEON;
 
     /* Some ARMv8 Android devices don't expose AT_HWCAP2. Fall back to
      * /proc/cpuinfo. See https://crbug.com/596156. */
@@ -336,18 +330,32 @@ void GFp_cpuid_setup(void) {
       hwcap2 = get_hwcap2_cpuinfo(&cpuinfo);
     }
 
+    uint32_t armcap2 = 0;
     if (hwcap2 & HWCAP2_AES) {
-      GFp_armcap_P |= ARMV8_AES;
+      armcap2 |= ARMV8_AES;
     }
     if (hwcap2 & HWCAP2_PMULL) {
-      GFp_armcap_P |= ARMV8_PMULL;
+      armcap2 |= ARMV8_PMULL;
     }
     if (hwcap2 & HWCAP2_SHA1) {
-      GFp_armcap_P |= ARMV8_SHA1;
+      armcap2 |= ARMV8_SHA1;
     }
     if (hwcap2 & HWCAP2_SHA2) {
-      GFp_armcap_P |= ARMV8_SHA256;
+      armcap2 |= ARMV8_SHA256;
     }
+
+    /* Clear NEON support if known broken. The broken CPU doesn't support any
+     * crypto CPU instructions, so skip this check if any of those were
+     * detected. */
+    if (armcap2 == 0) {
+      g_has_broken_neon = has_broken_neon(&cpuinfo);
+      if (g_has_broken_neon) {
+        armcap &= ~ARMV7_NEON;
+        armcap2 = 0;
+      }
+    }
+
+    GFp_armcap_P = armcap | armcap2;
   }
 
   OPENSSL_free(cpuinfo_data);
