@@ -354,9 +354,11 @@ void GFp_cpuid_setup(void) {
       armcap2 |= ARMV8_SHA256;
     }
 
-    /* Clear NEON support if known broken. The broken CPU doesn't support any
+    /* Clear NEON support if known broken. The broken CPU is 32-bit only so
+     * skip this check in 64-bit mode. The broken CPU doesn't support any
      * crypto CPU instructions, so skip this check if any of those were
      * detected. */
+#if defined(OPENSSL_32_BIT)
     if (armcap2 == 0) {
       if (!read_cpuinfo(&cpuinfo)) {
         return;
@@ -367,6 +369,7 @@ void GFp_cpuid_setup(void) {
         armcap2 = 0;
       }
     }
+#endif
 
     GFp_armcap_P = armcap | armcap2;
   }
