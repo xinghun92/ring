@@ -192,6 +192,13 @@ static void STRING_PIECE_trim(STRING_PIECE *s) {
   }
 }
 
+static int read_cpuinfo(STRING_PIECE *cpuinfo) {
+  if (cpuinfo->data != NULL) {
+    return 1;
+  }
+  return read_file(&cpuinfo->data, &cpuinfo->len, "/proc/cpuinfo");
+}
+
 /* extract_cpuinfo_field extracts a /proc/cpuinfo field named |field| from
  * |in|.  If found, it sets |*out| to the value and returns one. Otherwise, it
  * returns zero. */
@@ -289,14 +296,11 @@ extern uint32_t GFp_armcap_P;
 static int g_has_broken_neon;
 
 void GFp_cpuid_setup(void) {
-  char *cpuinfo_data;
-  size_t cpuinfo_len;
-  if (!read_file(&cpuinfo_data, &cpuinfo_len, "/proc/cpuinfo")) {
-    return;
-  }
+  /* This string piece owns the data it references, which is not usually the
+   * case for string pieces. */
   STRING_PIECE cpuinfo;
-  cpuinfo.data = cpuinfo_data;
-  cpuinfo.len = cpuinfo_len;
+  cpuinfo.data = NULL;
+  cpuinfo.len = 0;
 
   /* |getauxval| is not available on Android until API level 20. If it is
    * unavailable, read from /proc/self/auxv as a fallback. This is unreadable
@@ -313,6 +317,9 @@ void GFp_cpuid_setup(void) {
     hwcap = getauxval_proc(AT_HWCAP);
   }
   if (hwcap == 0) {
+    if (!read_cpuinfo(&cpuinfo)) {
+      return;
+    }
     hwcap = get_hwcap_cpuinfo(&cpuinfo);
   }
 
@@ -327,6 +334,9 @@ void GFp_cpuid_setup(void) {
       hwcap2 = getauxval(AT_HWCAP2);
     }
     if (hwcap2 == 0) {
+      if (!read_cpuinfo(&cpuinfo)) {
+        return;
+      }
       hwcap2 = get_hwcap2_cpuinfo(&cpuinfo);
     }
 
@@ -348,6 +358,9 @@ void GFp_cpuid_setup(void) {
      * crypto CPU instructions, so skip this check if any of those were
      * detected. */
     if (armcap2 == 0) {
+      if (!read_cpuinfo(&cpuinfo)) {
+        return;
+      }
       g_has_broken_neon = has_broken_neon(&cpuinfo);
       if (g_has_broken_neon) {
         armcap &= ~ARMV7_NEON;
@@ -358,7 +371,7 @@ void GFp_cpuid_setup(void) {
     GFp_armcap_P = armcap | armcap2;
   }
 
-  OPENSSL_free(cpuinfo_data);
+  OPENSSL_free(cpuinfo.data);
 }
 
 int GFp_has_broken_NEON(void) { return g_has_broken_neon; }
