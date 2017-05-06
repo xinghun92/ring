@@ -64,7 +64,9 @@ pub static COMMON_OPS: CommonOps = CommonOps {
 
     elem_add_impl: GFp_p384_elem_add,
     elem_mul_mont: GFp_p384_elem_mul_mont,
-    elem_sqr_mont: GFp_p384_elem_sqr_mont,
+
+    // XXX: Inefficient. TODO: Make a dedicated squaring routine.
+    elem_sqr_mont: |r, a| GFp_p384_elem_mul_mont(r, a, a),
 
     point_add_jacobian_impl: GFp_nistz384_point_add,
 };
@@ -326,15 +328,6 @@ fn p384_scalar_inv_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
     }
 
     acc
-}
-
-
-#[allow(non_snake_case)]
-unsafe extern fn GFp_p384_elem_sqr_mont(
-        r: *mut Limb/*[COMMON_OPS.num_limbs]*/,
-        a: *const Limb/*[COMMON_OPS.num_limbs]*/) {
-    // XXX: Inefficient. TODO: Make a dedicated squaring routine.
-    GFp_p384_elem_mul_mont(r, a, a);
 }
 
 

@@ -12,6 +12,8 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+#![feature(closure_to_fn_coercion)]
+
 //! Safe, fast, small crypto using Rust with BoringSSL's cryptography
 //! primitives.
 //!
