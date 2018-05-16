@@ -88,8 +88,7 @@ $_n0="$num,#14*4";
 $_num="$num,#15*4";	$_bpend=$_num;
 
 $code=<<___;
-#include <GFp/arm_arch.h>
-
+e
 .text
 #if defined(__thumb2__)
 .syntax	unified
