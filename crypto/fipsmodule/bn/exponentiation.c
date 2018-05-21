@@ -116,6 +116,9 @@
 #include "../../internal.h"
 #include "../../limbs/limbs.h"
 
+// |BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE| will be 6 in some cases and
+// that likely means 5 would be suboptimal. TODO: measure and optimize this.
+static const int window = 5;
 
 // Prototypes to avoid -Wmissing-prototypes warnings.
 int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
@@ -147,7 +150,7 @@ int GFp_bn_from_montgomery(BN_ULONG rp[], const BN_ULONG ap[],
 // used to transfer a BIGNUM from/to that table.
 
 static void copy_to_prebuf(const BN_ULONG b[], int top, BN_ULONG table[],
-                           int idx, int window) {
+                           int idx) {
   int i, j;
   const int width = 1 << window;
   for (i = 0, j = idx; i < top; i++, j += width)  {
@@ -155,45 +158,33 @@ static void copy_to_prebuf(const BN_ULONG b[], int top, BN_ULONG table[],
   }
 }
 
-static void copy_from_prebuf(BN_ULONG b[], int top, const BN_ULONG buf[], int idx,
-                            int window) {
+static void copy_from_prebuf(BN_ULONG b[], int top, const BN_ULONG buf[], int idx) {
   int i, j;
   const int width = 1 << window;
   volatile const BN_ULONG *table = (volatile const BN_ULONG *)buf;
 
-  if (window <= 3) {
-    for (i = 0; i < top; i++, table += width) {
-      BN_ULONG acc = 0;
+  assert(window > 3);
+  int xstride = 1 << (window - 2);
+  BN_ULONG y0, y1, y2, y3;
 
-      for (j = 0; j < width; j++) {
-        acc |= table[j] & ((BN_ULONG)0 - (constant_time_eq_int(j, idx) & 1));
-      }
+  i = idx >> (window - 2);  // equivalent of idx / xstride
+  idx &= xstride - 1;       // equivalent of idx % xstride
 
-      b[i] = acc;
+  y0 = (BN_ULONG)0 - (constant_time_eq_int(i, 0) & 1);
+  y1 = (BN_ULONG)0 - (constant_time_eq_int(i, 1) & 1);
+  y2 = (BN_ULONG)0 - (constant_time_eq_int(i, 2) & 1);
+  y3 = (BN_ULONG)0 - (constant_time_eq_int(i, 3) & 1);
+
+  for (i = 0; i < top; i++, table += width) {
+    BN_ULONG acc = 0;
+
+    for (j = 0; j < xstride; j++) {
+      acc |= ((table[j + 0 * xstride] & y0) | (table[j + 1 * xstride] & y1) |
+              (table[j + 2 * xstride] & y2) | (table[j + 3 * xstride] & y3)) &
+             ((BN_ULONG)0 - (constant_time_eq_int(j, idx) & 1));
     }
-  } else {
-    int xstride = 1 << (window - 2);
-    BN_ULONG y0, y1, y2, y3;
 
-    i = idx >> (window - 2);  // equivalent of idx / xstride
-    idx &= xstride - 1;       // equivalent of idx % xstride
-
-    y0 = (BN_ULONG)0 - (constant_time_eq_int(i, 0) & 1);
-    y1 = (BN_ULONG)0 - (constant_time_eq_int(i, 1) & 1);
-    y2 = (BN_ULONG)0 - (constant_time_eq_int(i, 2) & 1);
-    y3 = (BN_ULONG)0 - (constant_time_eq_int(i, 3) & 1);
-
-    for (i = 0; i < top; i++, table += width) {
-      BN_ULONG acc = 0;
-
-      for (j = 0; j < xstride; j++) {
-        acc |= ((table[j + 0 * xstride] & y0) | (table[j + 1 * xstride] & y1) |
-                (table[j + 2 * xstride] & y2) | (table[j + 3 * xstride] & y3)) &
-               ((BN_ULONG)0 - (constant_time_eq_int(j, idx) & 1));
-      }
-
-      b[i] = acc;
-    }
+    b[i] = acc;
   }
 }
 #endif
@@ -267,13 +258,12 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
   int bits = max_bits;
   assert(bits > 0);
 
-  // Get the window size to use with size of p.
 #if defined(OPENSSL_BN_ASM_MONT5)
-  static const int window = 5;
+  assert(window == 5);
   // reserve space for n copy
   powerbufLen += top * sizeof(n[0]);
 #else
-  const int window = BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE;
+  assert(window <= BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE);
 #endif
 
   // Allocate a buffer large enough to hold all of the pre-computed
@@ -401,29 +391,28 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
   {
     const BN_ULONG *np = n;
 
-    copy_to_prebuf(tmp, top, powerbuf, 0, window);
-    copy_to_prebuf(am, top, powerbuf, 1, window);
+    copy_to_prebuf(tmp, top, powerbuf, 0);
+    copy_to_prebuf(am, top, powerbuf, 1);
 
     // If the window size is greater than 1, then calculate
     // val[i=2..2^winsize-1]. Powers are computed as a*a^(i-1)
     // (even powers could instead be computed as (a^(i/2))^2
     // to use the slight performance advantage of sqr over mul).
-    if (window > 1) {
-      GFp_bn_mul_mont(tmp, am, am, np, n0, top);
-      copy_to_prebuf(tmp, top, powerbuf, 2, window);
+    assert(window > 1);
+    GFp_bn_mul_mont(tmp, am, am, np, n0, top);
+    copy_to_prebuf(tmp, top, powerbuf, 2);
 
-      for (i = 3; i < numPowers; i++) {
-        // Calculate a^i = a^(i-1) * a
-        GFp_bn_mul_mont(tmp, am, tmp, np, n0, top);
-        copy_to_prebuf(tmp, top, powerbuf, i, window);
-      }
+    for (i = 3; i < numPowers; i++) {
+      // Calculate a^i = a^(i-1) * a
+      GFp_bn_mul_mont(tmp, am, tmp, np, n0, top);
+      copy_to_prebuf(tmp, top, powerbuf, i);
     }
 
     bits--;
     for (wvalue = 0, i = bits % window; i >= 0; i--, bits--) {
       wvalue = (wvalue << 1) + GFp_bn_is_bit_set_words(p, num_limbs, bits);
     }
-    copy_from_prebuf(tmp, top, powerbuf, wvalue, window);
+    copy_from_prebuf(tmp, top, powerbuf, wvalue);
 
     // Scan the exponent one window at a time starting from the most
     // significant bits.
@@ -437,7 +426,7 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
       }
 
       // Fetch the appropriate pre-computed value from the pre-buf */
-      copy_from_prebuf(am, top, powerbuf, wvalue, window);
+      copy_from_prebuf(am, top, powerbuf, wvalue);
 
       // Multiply the result into the intermediate result */
       GFp_bn_mul_mont(tmp, tmp, am, np, n0, top);
