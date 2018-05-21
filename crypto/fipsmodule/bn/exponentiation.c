@@ -120,52 +120,67 @@
 // that likely means 5 would be suboptimal. TODO: measure and optimize this.
 static const int window = 5;
 
+// Half the size of the largest supported public modulus, in limbs.
+#define PRIVATE_MODULUS_MAX_LIMBS (8192 / 2 / BN_BITS2)
+
 // Prototypes to avoid -Wmissing-prototypes warnings.
 int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
                                   const BN_ULONG p[], const BN_ULONG one_mont[],
                                   const BN_ULONG n[], size_t num_limbs,
                                   const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS]);
+const size_t GFp_PRIVATE_MODULUS_MAX_LIMBS = PRIVATE_MODULUS_MAX_LIMBS;
 
 #if defined(OPENSSL_X86_64)
 #define OPENSSL_BN_ASM_MONT5
+#endif
 
 void GFp_bn_mul_mont_gather5(BN_ULONG rp[], const BN_ULONG ap[],
                              const BN_ULONG table[], const BN_ULONG np[],
-                             const BN_ULONG n0[], int num, int power);
+                             const BN_ULONG n0[], size_t num, size_t power);
 void GFp_bn_scatter5(const BN_ULONG inp[], size_t num, BN_ULONG table[],
                      size_t power);
 void GFp_bn_gather5(BN_ULONG out[], size_t num, const BN_ULONG table[],
                     size_t power);
 void GFp_bn_power5(BN_ULONG rp[], const BN_ULONG ap[], const BN_ULONG table[],
-                   const BN_ULONG np[], const BN_ULONG n0[], int num,
-                   int power);
+                   const BN_ULONG np[], const BN_ULONG n0[], size_t num,
+                   size_t power);
+
+#if defined(OPENSSL_BN_ASM_MONT5)
 int GFp_bn_from_montgomery(BN_ULONG rp[], const BN_ULONG ap[],
                            const BN_ULONG *not_used, const BN_ULONG np[],
                            const BN_ULONG n0[], int num);
-#else
+#endif
 
 // GFp_BN_mod_exp_mont_consttime() stores the precomputed powers in a specific
 // layout so that accessing any of these table values shows the same access
 // pattern as far as cache lines are concerned. The following functions are
 // used to transfer a BIGNUM from/to that table.
+#if !defined(OPENSSL_BN_ASM_MONT5)
 
-static void copy_to_prebuf(const BN_ULONG b[], int top, BN_ULONG table[],
-                           int idx) {
-  int i, j;
-  const int width = 1 << window;
-  for (i = 0, j = idx; i < top; i++, j += width)  {
+void GFp_bn_scatter5(const BN_ULONG b[], size_t top, BN_ULONG table[],
+                     size_t power) {
+  assert(window == 5);
+
+  size_t i, j;
+  const size_t width = 1u << window;
+  for (i = 0, j = power; i < top; i++, j += width)  {
     table[j] = b[i];
   }
 }
 
-static void copy_from_prebuf(BN_ULONG b[], int top, const BN_ULONG buf[], int idx) {
-  int i, j;
-  const int width = 1 << window;
+void GFp_bn_gather5(BN_ULONG b[], size_t top, const BN_ULONG buf[],
+                    size_t power) {
+  assert(window == 5);
+
+  size_t i, j;
+  const size_t width = 1u << window;
   volatile const BN_ULONG *table = (volatile const BN_ULONG *)buf;
 
   assert(window > 3);
-  int xstride = 1 << (window - 2);
+  size_t xstride = 1u << (window - 2);
   BN_ULONG y0, y1, y2, y3;
+
+  size_t idx = power;
 
   i = idx >> (window - 2);  // equivalent of idx / xstride
   idx &= xstride - 1;       // equivalent of idx % xstride
@@ -191,11 +206,9 @@ static void copy_from_prebuf(BN_ULONG b[], int top, const BN_ULONG buf[], int id
 
 // GFp_BN_mod_exp_mont_consttime is based on the assumption that the L1 data cache
 // line width of the target processor is at least the following value.
-#define MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH (64)
+#define MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH 64
 #define MOD_EXP_CTIME_MIN_CACHE_LINE_MASK \
-  (MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH - 1)
-
-#if !defined(OPENSSL_X86_64)
+  ((MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH) - 1)
 
 // Window sizes optimized for fixed window size modular exponentiation
 // algorithm (GFp_BN_mod_exp_mont_consttime).
@@ -209,23 +222,49 @@ static void copy_from_prebuf(BN_ULONG b[], int top, const BN_ULONG buf[], int id
 // 7 should only be used on processors that have a 128 byte or greater cache
 // line size.
 #if MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH == 64
-
 #define BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE (6)
-
 #elif MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH == 32
-
 #define BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE (5)
-
 #endif
-
-#endif // defined(OPENSSL_X86_64)
 
 // Given a pointer value, compute the next address that is a cache line
 // multiple.
 #define MOD_EXP_CTIME_ALIGN(x_)          \
   ((unsigned char *)(x_) +               \
    (MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH - \
-    (((uintptr_t)(x_)) & (MOD_EXP_CTIME_MIN_CACHE_LINE_MASK))))
+    (((uintptr_t)(x_)) & ((uintptr_t)MOD_EXP_CTIME_MIN_CACHE_LINE_MASK))))
+
+#if !defined(OPENSSL_BN_ASM_MONT5)
+
+void GFp_bn_mul_mont_gather5(BN_ULONG rp[], const BN_ULONG ap[],
+                             const BN_ULONG table[], const BN_ULONG np[],
+                             const BN_ULONG n0[], size_t num, size_t power) {
+  // The |OPENSSL_BN_ASM_MONT5| version doesn't require |rp != ap| but this
+  // version does, so we can gather into rp.
+  assert(rp != ap);
+  GFp_bn_gather5(rp, num, table, power);
+  GFp_bn_mul_mont(rp, rp, ap, np, n0, num);
+}
+
+void GFp_bn_power5(BN_ULONG rp[], const BN_ULONG ap[], const BN_ULONG table[],
+                   const BN_ULONG np[], const BN_ULONG n0[], size_t num,
+                   size_t power) {
+  // The |OPENSSL_BN_ASM_MONT5| version requires that the number of (64-bit)
+  // limbs must be divisible by 8.
+  assert((num * BN_BITS2) % 512 == 0);
+  alignas(MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH) BN_ULONG
+    tmp[PRIVATE_MODULUS_MAX_LIMBS];
+  assert(num <= PRIVATE_MODULUS_MAX_LIMBS);
+
+  GFp_bn_mul_mont(tmp, ap, ap, np, n0, num);
+  for (size_t i = 1; i < 5; ++i) {
+    GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, num);
+  }
+
+  GFp_bn_mul_mont_gather5(rp, tmp, table, np, n0, num, power);
+}
+
+#endif
 
 // This variant of GFp_BN_mod_exp_mont() uses fixed windows and the special
 // precomputation memory layout to limit data-dependency to a minimum
@@ -241,42 +280,51 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
                                   const BN_ULONG p[], const BN_ULONG one_mont[],
                                   const BN_ULONG n[], size_t num_limbs,
                                   const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS]) {
+  if (!GFp_bn_mul_mont_check_num_limbs(num_limbs)) {
+    return 0;
+  }
+  // |GFp_bn_power5| and |GFp_bn_from_montgomery| require this.
+  if ((num_limbs * BN_BITS2) % 512 != 0) {
+    return 0;
+  }
+  // The C implementation of |GFp_bn_power5| requires this. Also, this bounds
+  // the stack usage from the hidden |alloca()| calls in the
+  // |OPENSSL_BN_ASM_MONT5|.
+  if (num_limbs > PRIVATE_MODULUS_MAX_LIMBS) {
+    return 0;
+  }
+
   int i, ret = 0, wvalue;
 
   int numPowers;
   unsigned char *powerbufFree = NULL;
   int powerbufLen = 0;
 
-  const int top = (int)num_limbs;
-  if (!GFp_bn_mul_mont_check_num_limbs(num_limbs)) {
-    goto err;
-  }
+  const int top = (int) num_limbs;
 
   // Use all bits stored in |p|, rather than |BN_num_bits|, so we do not leak
   // whether the top bits are zero.
-  int max_bits = (int)num_limbs * BN_BITS2;
+  int max_bits = (int) num_limbs * BN_BITS2;
   int bits = max_bits;
   assert(bits > 0);
 
-#if defined(OPENSSL_BN_ASM_MONT5)
   assert(window == 5);
+  assert(window <= BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE);
+
   // reserve space for n copy
   powerbufLen += top * sizeof(n[0]);
-#else
-  assert(window <= BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE);
-#endif
 
   // Allocate a buffer large enough to hold all of the pre-computed
   // powers of am, am itself and tmp.
-  numPowers = 1 << window;
+  numPowers = 1u << window;
   powerbufLen +=
-      sizeof(n[0]) *
-      (top * numPowers + ((2 * top) > numPowers ? (2 * top) : numPowers));
+    sizeof(n[0]) *
+    (top * numPowers + ((2 * top) > numPowers ? (2 * top) : numPowers));
   powerbufFree = malloc(powerbufLen + MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH);
   if (powerbufFree == NULL) {
     goto err;
   }
-  BN_ULONG *powerbuf = (BN_ULONG *)MOD_EXP_CTIME_ALIGN(powerbufFree);
+  BN_ULONG *powerbuf = (BN_ULONG *) MOD_EXP_CTIME_ALIGN(powerbufFree);
 
   // Lay down tmp and am right after powers table.
   BN_ULONG *tmp = powerbuf + (top * numPowers);
@@ -286,16 +334,12 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
   LIMBS_copy(tmp, one_mont, num_limbs);
   LIMBS_copy(am, a_mont, num_limbs);
 
-#if defined(OPENSSL_BN_ASM_MONT5)
-  // This optimization uses ideas from http://eprint.iacr.org/2011/239,
-  // specifically optimization of cache-timing attack countermeasures
-  // and pre-computation optimization.
+  // copy n[] to improve cache locality
+  BN_ULONG *np = am + top;
+  LIMBS_copy(np, n, num_limbs);
+
+  // Use the precomputation from http://eprint.iacr.org/2011/239.
   {
-    BN_ULONG *np = am + top;
-
-    // copy n[] to improve cache locality
-    LIMBS_copy(np, n, num_limbs);
-
     GFp_bn_scatter5(tmp, top, powerbuf, 0);
     GFp_bn_scatter5(am, top, powerbuf, 1);
     GFp_bn_mul_mont(tmp, am, am, np, n0, top);
@@ -325,7 +369,12 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
       GFp_bn_mul_mont_gather5(tmp, am, powerbuf, np, n0, top, i - 1);
       GFp_bn_scatter5(tmp, top, powerbuf, i);
     }
+  }
 
+  // This optimization uses ideas from http://eprint.iacr.org/2011/239,
+  // specifically optimization of cache-timing attack countermeasures
+  // and pre-computation optimization.
+  {
     bits--;
     for (wvalue = 0, i = bits % 5; i >= 0; i--, bits--) {
       wvalue = (wvalue << 1) + GFp_bn_is_bit_set_words(p, num_limbs, bits);
@@ -338,20 +387,7 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
 
     // Scan the exponent one window at a time starting from the most
     // significant bits.
-    if (top & 7) {
-      while (bits >= 0) {
-        for (wvalue = 0, i = 0; i < 5; i++, bits--) {
-          wvalue = (wvalue << 1) + GFp_bn_is_bit_set_words(p, num_limbs, bits);
-        }
-
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        GFp_bn_mul_mont_gather5(tmp, tmp, powerbuf, np, n0, top, wvalue);
-      }
-    } else {
+    {
       const aliasing_uint8 *p_bytes = (const aliasing_uint8 *)p;
       assert(bits < max_bits);
       // |p = 0| has been handled as a special case, so |max_bits| is at least
@@ -383,56 +419,12 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
       }
     }
 
+#if defined(OPENSSL_BN_ASM_MONT5)
     if (!GFp_bn_from_montgomery(tmp, tmp, NULL, np, n0, top)) {
       goto err;
     }
-  }
-#else
-  {
-    const BN_ULONG *np = n;
-
-    copy_to_prebuf(tmp, top, powerbuf, 0);
-    copy_to_prebuf(am, top, powerbuf, 1);
-
-    // If the window size is greater than 1, then calculate
-    // val[i=2..2^winsize-1]. Powers are computed as a*a^(i-1)
-    // (even powers could instead be computed as (a^(i/2))^2
-    // to use the slight performance advantage of sqr over mul).
-    assert(window > 1);
-    GFp_bn_mul_mont(tmp, am, am, np, n0, top);
-    copy_to_prebuf(tmp, top, powerbuf, 2);
-
-    for (i = 3; i < numPowers; i++) {
-      // Calculate a^i = a^(i-1) * a
-      GFp_bn_mul_mont(tmp, am, tmp, np, n0, top);
-      copy_to_prebuf(tmp, top, powerbuf, i);
-    }
-
-    bits--;
-    for (wvalue = 0, i = bits % window; i >= 0; i--, bits--) {
-      wvalue = (wvalue << 1) + GFp_bn_is_bit_set_words(p, num_limbs, bits);
-    }
-    copy_from_prebuf(tmp, top, powerbuf, wvalue);
-
-    // Scan the exponent one window at a time starting from the most
-    // significant bits.
-    while (bits >= 0) {
-      wvalue = 0;  // The 'value' of the window
-
-      // Scan the window, squaring the result as we go
-      for (i = 0; i < window; i++, bits--) {
-        GFp_bn_mul_mont(tmp, tmp, tmp, np, n0, top);
-        wvalue = (wvalue << 1) + GFp_bn_is_bit_set_words(p, num_limbs, bits);
-      }
-
-      // Fetch the appropriate pre-computed value from the pre-buf */
-      copy_from_prebuf(am, top, powerbuf, wvalue);
-
-      // Multiply the result into the intermediate result */
-      GFp_bn_mul_mont(tmp, tmp, am, np, n0, top);
-    }
-  }
 #endif
+  }
   LIMBS_copy(rr, tmp, top);
 
   ret = 1;

@@ -921,6 +921,15 @@ mod tests {
     // Type-level representation of an arbitrary modulus.
     struct M {}
 
+    #[test]
+    fn test_private_modulus_max_limbs() {
+        extern {
+            static GFp_PRIVATE_MODULUS_MAX_LIMBS: c::size_t;
+        }
+        assert_eq!(MODULUS_MAX_LIMBS,
+                   2 * unsafe { GFp_PRIVATE_MODULUS_MAX_LIMBS });
+    }
+
     #[cfg(feature = "rsa_signing")]
     #[test]
     fn test_elem_exp_consttime() {
