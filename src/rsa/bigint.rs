@@ -704,6 +704,11 @@ impl<M: Prime> PrivateExponent<M> {
 pub fn elem_exp_consttime<M>(
         base: Elem<M, R>, exponent: &PrivateExponent<M>, oneR: &One<M, R>,
         m: &Modulus<M>) -> Result<Elem<M, Unencoded>, error::Unspecified> {
+    let storage_len = unsafe {
+        GFp_BN_mod_exp_mont_consttime_powerbuf_len(m.limbs.len())
+    };
+    let mut storage = vec![0; storage_len];
+
     let mut r = Elem {
         limbs: base.limbs,
         encoding: PhantomData,
@@ -712,7 +717,8 @@ pub fn elem_exp_consttime<M>(
         GFp_BN_mod_exp_mont_consttime(r.limbs.as_mut_ptr(), r.limbs.as_ptr(),
                                       exponent.limbs.as_ptr(),
                                       oneR.0.limbs.as_ptr(), m.limbs.as_ptr(),
-                                      m.limbs.len(), &m.n0)
+                                      m.limbs.len(), &m.n0, storage.as_mut_ptr(),
+                                      storage.len())
     })?;
 
     // XXX: On x86-64 only, `GFp_BN_mod_exp_mont_consttime` does the conversion
@@ -895,13 +901,19 @@ extern {
                                        n: *const limb::Limb, num_n: c::size_t,
                                        n0: &N0) -> c::int;
 
+    fn GFp_BN_mod_exp_mont_consttime_powerbuf_len(num_limbs: c::size_t)
+                                                  -> c::size_t;
+
     // `r` and `a` may alias.
     fn GFp_BN_mod_exp_mont_consttime(r: *mut limb::Limb,
                                      a_mont: *const limb::Limb,
                                      p: *const limb::Limb,
                                      one_mont: *const limb::Limb,
                                      n: *const limb::Limb,
-                                     num_limbs: c::size_t, n0: &N0) -> c::int;
+                                     num_limbs: c::size_t, n0: &N0,
+                                     powerbuf_unaligned: *mut limb::Limb,
+                                     powerbuf_unaligned_len: c::size_t)
+                                     -> c::int;
 
     // `r` and `a` may alias.
     fn LIMBS_add_mod(r: *mut limb::Limb, a: *const limb::Limb,

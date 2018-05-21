@@ -110,8 +110,6 @@
 #include <limits.h>
 #include <string.h>
 
-#include <GFp/mem.h>
-
 #include "internal.h"
 #include "../../internal.h"
 #include "../../limbs/limbs.h"
@@ -124,10 +122,13 @@ static const int window = 5;
 #define PRIVATE_MODULUS_MAX_LIMBS (8192 / 2 / BN_BITS2)
 
 // Prototypes to avoid -Wmissing-prototypes warnings.
+size_t GFp_BN_mod_exp_mont_consttime_powerbuf_len(size_t top);
 int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
                                   const BN_ULONG p[], const BN_ULONG one_mont[],
                                   const BN_ULONG n[], size_t num_limbs,
-                                  const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS]);
+                                  const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS],
+                                  BN_ULONG powerbuf_unaligned[],
+                                  size_t powerbuf_unaligned_len);
 const size_t GFp_PRIVATE_MODULUS_MAX_LIMBS = PRIVATE_MODULUS_MAX_LIMBS;
 
 #if defined(OPENSSL_X86_64)
@@ -266,6 +267,22 @@ void GFp_bn_power5(BN_ULONG rp[], const BN_ULONG ap[], const BN_ULONG table[],
 
 #endif
 
+size_t GFp_BN_mod_exp_mont_consttime_powerbuf_len(size_t top) {
+  // Allocate a buffer large enough to hold all of the pre-computed
+  // powers of am, am itself and tmp.
+  size_t numPowers = (size_t)1u << window;
+  size_t powerbuf_len =
+    (top * numPowers + ((2 * top) > numPowers ? (2 * top) : numPowers));
+
+  // Reserve space for |n| copy.
+  powerbuf_len += top;
+
+  // Reserve space for the alignment correction.
+  powerbuf_len += MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH;
+
+  return powerbuf_len;
+}
+
 // This variant of GFp_BN_mod_exp_mont() uses fixed windows and the special
 // precomputation memory layout to limit data-dependency to a minimum
 // to protect secret exponents (cf. the hyper-threading timing attacks
@@ -279,7 +296,13 @@ void GFp_bn_power5(BN_ULONG rp[], const BN_ULONG ap[], const BN_ULONG table[],
 int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
                                   const BN_ULONG p[], const BN_ULONG one_mont[],
                                   const BN_ULONG n[], size_t num_limbs,
-                                  const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS]) {
+                                  const BN_ULONG n0[BN_MONT_CTX_N0_LIMBS],
+                                  BN_ULONG powerbuf_unaligned[],
+                                  size_t powerbuf_unaligned_len) {
+  if (powerbuf_unaligned_len !=
+         GFp_BN_mod_exp_mont_consttime_powerbuf_len(num_limbs)) {
+    return 0;
+  }
   if (!GFp_bn_mul_mont_check_num_limbs(num_limbs)) {
     return 0;
   }
@@ -294,11 +317,7 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
     return 0;
   }
 
-  int i, ret = 0, wvalue;
-
-  int numPowers;
-  unsigned char *powerbufFree = NULL;
-  int powerbufLen = 0;
+  int i, wvalue;
 
   const int top = (int) num_limbs;
 
@@ -311,20 +330,9 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
   assert(window == 5);
   assert(window <= BN_MAX_WINDOW_BITS_FOR_CTIME_EXPONENT_SIZE);
 
-  // reserve space for n copy
-  powerbufLen += top * sizeof(n[0]);
+  BN_ULONG *powerbuf = (BN_ULONG *)MOD_EXP_CTIME_ALIGN(powerbuf_unaligned);
 
-  // Allocate a buffer large enough to hold all of the pre-computed
-  // powers of am, am itself and tmp.
-  numPowers = 1u << window;
-  powerbufLen +=
-    sizeof(n[0]) *
-    (top * numPowers + ((2 * top) > numPowers ? (2 * top) : numPowers));
-  powerbufFree = malloc(powerbufLen + MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH);
-  if (powerbufFree == NULL) {
-    goto err;
-  }
-  BN_ULONG *powerbuf = (BN_ULONG *) MOD_EXP_CTIME_ALIGN(powerbufFree);
+  size_t numPowers = (size_t)1u << window;
 
   // Lay down tmp and am right after powers table.
   BN_ULONG *tmp = powerbuf + (top * numPowers);
@@ -421,15 +429,11 @@ int GFp_BN_mod_exp_mont_consttime(BN_ULONG rr[], const BN_ULONG a_mont[],
 
 #if defined(OPENSSL_BN_ASM_MONT5)
     if (!GFp_bn_from_montgomery(tmp, tmp, NULL, np, n0, top)) {
-      goto err;
+      return 0;
     }
 #endif
   }
   LIMBS_copy(rr, tmp, top);
 
-  ret = 1;
-
-err:
-  OPENSSL_free(powerbufFree);
-  return (ret);
+  return 1;
 }
