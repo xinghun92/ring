@@ -99,8 +99,8 @@ armv7-linux-androideabi)
     adb shell mkdir -p /data/`dirname $testfile`
     adb push $testfile /data/$testfile
   done
-  adb shell mkdir -p /data/third-party/NIST
-  adb push third-party/NIST/SHAVS /data/third-party/NIST/SHAVS
+  adb shell mkdir -p /data/third_party/NIST
+  adb push third_party/NIST/SHAVS /data/third_party/NIST/SHAVS
   adb shell "cd /data && ./ring-test" 2>&1 | tee /tmp/ring-test-log
   grep "test result: ok" /tmp/ring-test-log
 
